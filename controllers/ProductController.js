@@ -92,19 +92,58 @@ const ProductController = {
 
     /* create new product */
     async create_product(req, res) {
-        const newProduct = new Product(req.body);
         try {
+            console.log('Creating product with data:', req.body);
+            console.log('User info:', req.user);
+            
+            // Clean up empty string values for optional fields
+            const productData = { ...req.body };
+            
+            // Convert empty strings to undefined for sparse unique fields
+            if (productData.sku === '') {
+                delete productData.sku;
+            }
+            if (productData.size === '') {
+                delete productData.size;
+            }
+            if (productData.color === '') {
+                delete productData.color;
+            }
+            
+            const newProduct = new Product(productData);
             const savedProduct = await newProduct.save();
+            
             res.status(201).json({
                 type: "success",
                 message: "Product created successfully",
-                savedProduct
+                data: savedProduct
             })
         } catch (err) {
+            console.error('Error creating product:', err);
+            
+            // Handle Mongoose validation errors
+            if (err.name === 'ValidationError') {
+                return res.status(400).json({
+                    type: "error",
+                    message: "Validation failed",
+                    errors: Object.values(err.errors).map(e => e.message)
+                });
+            }
+            
+            // Handle duplicate key errors
+            if (err.code === 11000) {
+                const field = Object.keys(err.keyPattern)[0];
+                return res.status(400).json({
+                    type: "error",
+                    message: `${field} already exists`,
+                    field
+                });
+            }
+            
             res.status(500).json({
                 type: "error",
                 message: "Something went wrong please try again",
-                err
+                error: err.message
             })
         }
     },

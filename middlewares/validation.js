@@ -15,10 +15,57 @@ const handleValidationErrors = (req, res, next) => {
 
 // Product validation rules
 const validateProduct = [
-    body('title').isLength({ min: 1, max: 200 }).withMessage('Title is required and must be less than 200 characters'),
-    body('description').isLength({ min: 10 }).withMessage('Description must be at least 10 characters'),
-    body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number'),
-    body('image').isURL().withMessage('Image must be a valid URL'),
+    body('title')
+        .isLength({ min: 1, max: 200 })
+        .withMessage('Title is required and must be less than 200 characters')
+        .trim(),
+    body('description')
+        .isLength({ min: 10 })
+        .withMessage('Description must be at least 10 characters')
+        .trim(),
+    body('price')
+        .isFloat({ min: 0 })
+        .withMessage('Price must be a positive number'),
+    body('stock')
+        .optional()
+        .isInt({ min: 0 })
+        .withMessage('Stock must be a non-negative integer'),
+    body('image')
+        .notEmpty()
+        .withMessage('Image is required')
+        .isString()
+        .withMessage('Image must be a string')
+        .custom((value) => {
+            // Allow both URLs and data URLs (for base64 images)
+            const urlRegex = /^(https?:\/\/|data:image\/)/i;
+            if (!urlRegex.test(value)) {
+                throw new Error('Image must be a valid URL or data URL');
+            }
+            return true;
+        }),
+    body('categories')
+        .optional()
+        .isArray()
+        .withMessage('Categories must be an array'),
+    body('sku')
+        .optional()
+        .isString()
+        .withMessage('SKU must be a string')
+        .trim(),
+    body('size')
+        .optional()
+        .isString()
+        .withMessage('Size must be a string')
+        .trim(),
+    body('color')
+        .optional()
+        .isString()
+        .withMessage('Color must be a string')
+        .trim(),
+    body('active')
+        .optional()
+        .isBoolean()
+        .withMessage('Active must be a boolean'),
     handleValidationErrors
 ];
 

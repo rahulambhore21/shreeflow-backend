@@ -6,6 +6,8 @@ const verifyToken = async (req, res, next) => {
     try {
         let token = req.header('Authorization') || req.header('token');
         
+        console.log('Received token:', token ? 'Token present' : 'No token');
+        
         if (!token) {
             return res.status(401).json({
                 type: "error",
@@ -19,12 +21,15 @@ const verifyToken = async (req, res, next) => {
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('Token decoded successfully:', { id: decoded.id, username: decoded.username });
         req.user = decoded;
         next();
     } catch (error) {
+        console.error('Token verification error:', error.message);
         res.status(401).json({
             type: "error",
-            message: "Invalid token"
+            message: "Invalid token",
+            error: error.message
         });
     }
 };
@@ -32,7 +37,9 @@ const verifyToken = async (req, res, next) => {
 // Verify admin privileges
 const verifyAdmin = async (req, res, next) => {
     try {
+        console.log('Verifying admin for user:', req.user);
         const user = await User.findById(req.user.id);
+        console.log('Found user:', user ? { id: user._id, username: user.username, isAdmin: user.isAdmin } : 'User not found');
         
         if (!user || !user.isAdmin) {
             return res.status(403).json({
@@ -43,9 +50,11 @@ const verifyAdmin = async (req, res, next) => {
         
         next();
     } catch (error) {
+        console.error('Error verifying admin status:', error);
         res.status(500).json({
             type: "error",
-            message: "Error verifying admin status"
+            message: "Error verifying admin status",
+            error: error.message
         });
     }
 };
