@@ -1,4 +1,5 @@
 const Order = require('../models/Order');
+const shiprocketService = require('../services/shiprocketService');
 
 const OrderController = {
 
@@ -235,6 +236,127 @@ const OrderController = {
                 type: "error",
                 message: "Failed to retrieve analytics",
                 error: err.message
+            });
+        }
+    },
+
+    /* Create Shiprocket shipment for order */
+    async createShipment(req, res) {
+        try {
+            const { orderId } = req.params;
+            
+            // Populate products to get product details
+            const order = await Order.findById(orderId).populate('products.productId');
+            if (!order) {
+                return res.status(404).json({
+                    type: "error",
+                    message: "Order not found"
+                });
+            }
+
+            console.log('Order found for shipment creation:', {
+                id: order._id,
+                hasCustomer: !!order.customer,
+                hasProducts: !!order.products && order.products.length > 0,
+                hasAddress: !!order.address,
+                customer: order.customer,
+                address: order.address
+            });
+
+            if (order.shipment_id) {
+                return res.status(400).json({
+                    type: "error",
+                    message: "Shipment already created for this order"
+                });
+            }
+
+            // Create shipment in Shiprocket
+            const shipmentResult = await shiprocketService.createOrderFromOurFormat(order);
+            
+            // Update order with shipment details
+            order.shipment_id = shipmentResult.shipment_id;
+            order.status = 'shipped';
+            if (shipmentResult.awb_code) {
+                order.awb = shipmentResult.awb_code;
+            }
+            await order.save();
+
+            res.status(200).json({
+                type: "success",
+                message: "Shipment created successfully",
+                data: {
+                    orderId: order._id,
+                    shipmentId: shipmentResult.shipment_id,
+                    awb: shipmentResult.awb_code
+                }
+            });
+        } catch (error) {
+            console.error('Create shipment error:', error);
+            res.status(500).json({
+                type: "error",
+                message: "Failed to create shipment",
+                error: error.message
+            });
+        }
+    },
+
+    /* Track order shipment */
+    async trackShipment(req, res) {
+        try {
+            const { orderId } = req.params;
+            
+            const order = await Order.findById(orderId);
+            if (!order) {
+                return res.status(404).json({
+                    type: "error",
+                    message: "Order not found"
+                });
+            }
+
+            if (!order.shipment_id) {
+                return res.status(400).json({
+                    type: "error",
+                    message: "No shipment found for this order"
+                });
+            }
+
+            // Get tracking details from Shiprocket
+            const trackingData = await shiprocketService.trackShipment(order.shipment_id);
+            
+            res.status(200).json({
+                type: "success",
+                data: {
+                    orderId: order._id,
+                    shipmentId: order.shipment_id,
+                    awb: order.awb,
+                    trackingData: trackingData
+                }
+            });
+        } catch (error) {
+            console.error('Track shipment error:', error);
+            res.status(500).json({
+                type: "error",
+                message: "Failed to track shipment",
+                error: error.message
+            });
+        }
+    },
+
+    /* Check Shiprocket integration status */
+    async checkShiprocketStatus(req, res) {
+        try {
+            const status = await shiprocketService.checkIntegrationStatus();
+            
+            res.status(200).json({
+                type: "success",
+                data: status
+            });
+        } catch (error) {
+            console.error('Check Shiprocket status error:', error);
+            res.status(500).json({
+                type: "error",
+                message: "Failed to check Shiprocket status",
+                error: error.message
             });
         }
     }

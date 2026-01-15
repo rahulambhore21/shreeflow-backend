@@ -27,6 +27,10 @@ const validateArticleUpdate = [
     handleValidationErrors
 ];
 
+// Admin routes (protected) - must come before dynamic routes
+// Get article analytics
+router.get('/admin/analytics', verifyToken, verifyAdmin, ArticleController.get_analytics);
+
 // Public routes
 // Get all articles (with filters)
 router.get('/', ArticleController.get_articles);
@@ -43,8 +47,5 @@ router.put('/:id', verifyToken, verifyAdmin, validateArticleUpdate, ArticleContr
 
 // Delete article
 router.delete('/:id', verifyToken, verifyAdmin, ArticleController.delete_article);
-
-// Get article analytics
-router.get('/admin/analytics', verifyToken, verifyAdmin, ArticleController.get_analytics);
 
 module.exports = router;

@@ -5,6 +5,7 @@ const AuthController = require('./AuthController.js');
 const ArticleController = require('./ArticleController.js');
 const ShiprocketController = require('./ShiprocketController.js');
 const AnalyticsController = require('./AnalyticsController.js');
+const ShippingController = require('./ShippingController.js');
 
 module.exports = {
     ProductController,
@@ -13,5 +14,6 @@ module.exports = {
     AuthController,
     ArticleController,
     ShiprocketController,
-    AnalyticsController
+    AnalyticsController,
+    ShippingController
 }

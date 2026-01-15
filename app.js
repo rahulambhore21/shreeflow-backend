@@ -5,7 +5,7 @@ require('dotenv').config();
 
 const { validateEnvVariables } = require('./utils/envValidator');
 const { errorHandler, notFound } = require('./middlewares/errorHandler');
-const { product_route, order_route, payment_route, auth_route, article_route, shiprocket_route, analytics_route } = require('./routes');
+const { product_route, order_route, payment_route, auth_route, article_route, shiprocket_route, analytics_route, shipping_route } = require('./routes');
 
 // Validate environment variables
 validateEnvVariables();
@@ -28,6 +28,7 @@ app.use('/api/v1/payments', payment_route);
 app.use('/api/v1/articles', article_route);
 app.use('/api/v1/shiprocket', shiprocket_route);
 app.use('/api/v1/analytics', analytics_route);
+app.use('/api/v1/shipping', shipping_route);
 
 // Health check route
 app.get('/api/v1/health', (req, res) => {

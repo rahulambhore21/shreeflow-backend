@@ -20,20 +20,69 @@ const AnalyticsController = {
                 }
             };
 
-            // Basic counts
+            // Previous period for growth calculation
+            const previousPeriodStart = new Date(thirtyDaysAgo);
+            previousPeriodStart.setDate(previousPeriodStart.getDate() - 30);
+            const previousDateFilter = {
+                createdAt: {
+                    $gte: previousPeriodStart,
+                    $lt: thirtyDaysAgo
+                }
+            };
+
+            // Basic counts - current period
             const [
                 totalProducts,
                 totalOrders,
                 totalUsers,
                 totalArticles,
-                totalRevenue
+                totalRevenue,
+                previousTotalOrders,
+                previousTotalRevenue,
+                previousTotalUsers
             ] = await Promise.all([
                 Product.countDocuments(),
                 Order.countDocuments(dateFilter),
-                User.countDocuments({ isAdmin: false }),
+                User.countDocuments({ isAdmin: false, ...dateFilter }),
                 Article.countDocuments(),
                 Order.aggregate([
                     { $match: { ...dateFilter, status: { $in: ['paid', 'delivered'] } } },
+                    { $group: { _id: null, total: { $sum: '$amount' } } }
+                ]),
+                Order.countDocuments(previousDateFilter),
+                Order.aggregate([
+                    { $match: { ...previousDateFilter, status: { $in: ['paid', 'delivered'] } } },
+                    { $group: { _id: null, total: { $sum: '$amount' } } }
+                ]),
+                User.countDocuments({ isAdmin: false, ...previousDateFilter })
+            ]);
+
+            const currentRevenue = totalRevenue[0]?.total || 0;
+            const pastRevenue = previousTotalRevenue[0]?.total || 0;
+
+            // Calculate growth percentages
+            const revenueGrowth = pastRevenue > 0 ? ((currentRevenue - pastRevenue) / pastRevenue * 100) : 0;
+            const orderGrowth = previousTotalOrders > 0 ? ((totalOrders - previousTotalOrders) / previousTotalOrders * 100) : 0;
+            const customerGrowth = previousTotalUsers > 0 ? ((totalUsers - previousTotalUsers) / previousTotalUsers * 100) : 0;
+
+            // Current and last month revenue
+            const currentMonth = new Date();
+            currentMonth.setDate(1);
+            currentMonth.setHours(0, 0, 0, 0);
+            
+            const lastMonth = new Date(currentMonth);
+            lastMonth.setMonth(lastMonth.getMonth() - 1);
+
+            const [currentMonthRevenue, lastMonthRevenue] = await Promise.all([
+                Order.aggregate([
+                    { $match: { createdAt: { $gte: currentMonth }, status: { $in: ['paid', 'delivered'] } } },
+                    { $group: { _id: null, total: { $sum: '$amount' } } }
+                ]),
+                Order.aggregate([
+                    { $match: { 
+                        createdAt: { $gte: lastMonth, $lt: currentMonth }, 
+                        status: { $in: ['paid', 'delivered'] } 
+                    }},
                     { $group: { _id: null, total: { $sum: '$amount' } } }
                 ])
             ]);
@@ -44,38 +93,43 @@ const AnalyticsController = {
                 { $group: { _id: '$status', count: { $sum: 1 } } }
             ]);
 
-            // Revenue trend (last 7 days)
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            
-            const dailyRevenue = await Order.aggregate([
+            // Monthly revenue for chart (last 12 months)
+            const monthlyRevenue = await Order.aggregate([
                 {
                     $match: {
                         status: { $in: ['paid', 'delivered'] },
-                        createdAt: { $gte: sevenDaysAgo }
+                        createdAt: { $gte: new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1) }
                     }
                 },
                 {
                     $group: {
                         _id: {
-                            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }
+                            year: { $year: "$createdAt" },
+                            month: { $month: "$createdAt" }
                         },
-                        revenue: { $sum: '$amount' },
-                        orders: { $sum: 1 }
+                        revenue: { $sum: '$amount' }
                     }
                 },
-                { $sort: { '_id': 1 } }
+                { $sort: { '_id.year': 1, '_id.month': 1 } }
             ]);
 
+            // Fill missing months with 0
+            const monthlyRevenueArray = new Array(12).fill(0);
+            monthlyRevenue.forEach(item => {
+                const monthIndex = item._id.month - 1;
+                if (monthIndex >= 0 && monthIndex < 12) {
+                    monthlyRevenueArray[monthIndex] = item.revenue;
+                }
+            });
+
             // Top selling products
-            const topProducts = await Order.aggregate([
+            const topSellingProducts = await Order.aggregate([
                 { $match: { status: { $in: ['paid', 'delivered'] } } },
                 { $unwind: '$products' },
                 {
                     $group: {
                         _id: '$products.productId',
-                        totalSold: { $sum: '$products.quantity' },
-                        revenue: { $sum: { $multiply: ['$products.quantity', 1] } } // Will need product price
+                        totalSold: { $sum: '$products.quantity' }
                     }
                 },
                 { $sort: { totalSold: -1 } },
@@ -92,72 +146,56 @@ const AnalyticsController = {
                 {
                     $project: {
                         title: '$productDetails.title',
-                        image: '$productDetails.image',
-                        price: '$productDetails.price',
                         totalSold: 1,
-                        revenue: { $multiply: ['$totalSold', '$productDetails.price'] }
+                        totalRevenue: { $multiply: ['$totalSold', '$productDetails.price'] }
                     }
                 }
             ]);
 
-            // Recent orders
-            const recentOrders = await Order.find(dateFilter)
-                .sort({ createdAt: -1 })
-                .limit(10)
-                .populate('products.productId', 'title price image')
-                .select('customer amount status createdAt');
+            // Product stock analysis
+            const outOfStockProducts = await Product.countDocuments({ stock: 0 });
+            const lowStockProducts = await Product.countDocuments({ stock: { $gt: 0, $lte: 5 } });
 
-            // Low stock products
-            const lowStockProducts = await Product.find({ stock: { $lte: 5 } })
-                .select('title stock price image')
-                .sort({ stock: 1 })
-                .limit(10);
+            // New customers this month
+            const newCustomersThisMonth = await User.countDocuments({
+                isAdmin: false,
+                createdAt: { $gte: currentMonth }
+            });
 
-            // User growth (last 30 days)
-            const userGrowth = await User.aggregate([
-                {
-                    $match: {
-                        createdAt: { $gte: thirtyDaysAgo },
-                        isAdmin: false
-                    }
-                },
-                {
-                    $group: {
-                        _id: {
-                            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }
-                        },
-                        newUsers: { $sum: 1 }
-                    }
-                },
-                { $sort: { '_id': 1 } }
+            // Returning customers (users who have more than one order)
+            const returningCustomers = await Order.aggregate([
+                { $group: { _id: '$customer.email', orderCount: { $sum: 1 } } },
+                { $match: { orderCount: { $gt: 1 } } },
+                { $count: "returningCustomers" }
             ]);
-
-            // Article performance
-            const topArticles = await Article.find({ status: 'published' })
-                .sort({ views: -1 })
-                .limit(5)
-                .select('title views likes publishedAt');
 
             res.status(200).json({
                 type: "success",
                 data: {
-                    overview: {
-                        totalProducts,
-                        totalOrders,
-                        totalUsers,
-                        totalArticles,
-                        totalRevenue: totalRevenue[0]?.total || 0
-                    },
+                    // Structure expected by frontend
+                    totalRevenue: currentRevenue,
+                    revenueGrowthPercentage: Math.round(revenueGrowth * 100) / 100,
+                    currentMonthRevenue: currentMonthRevenue[0]?.total || 0,
+                    lastMonthRevenue: lastMonthRevenue[0]?.total || 0,
+                    
+                    totalOrders,
+                    orderGrowthPercentage: Math.round(orderGrowth * 100) / 100,
                     ordersByStatus: ordersByStatus.reduce((acc, item) => {
                         acc[item._id] = item.count;
                         return acc;
                     }, {}),
-                    dailyRevenue,
-                    topProducts,
-                    recentOrders,
+                    
+                    totalCustomers: totalUsers,
+                    customerGrowthPercentage: Math.round(customerGrowth * 100) / 100,
+                    newCustomersThisMonth,
+                    returningCustomers: returningCustomers[0]?.returningCustomers || 0,
+                    
+                    totalProducts,
+                    outOfStockProducts,
                     lowStockProducts,
-                    userGrowth,
-                    topArticles
+                    
+                    topSellingProducts,
+                    monthlyRevenue: monthlyRevenueArray
                 }
             });
 
