@@ -1,6 +1,11 @@
 // Global error handling middleware
 const errorHandler = (err, req, res, next) => {
-    console.error('Error Stack:', err.stack);
+    // Only log stack traces in development
+    if (process.env.NODE_ENV !== 'production') {
+        console.error('Error Stack:', err.stack);
+    } else {
+        console.error('Error:', err.message);
+    }
 
     // Mongoose validation error
     if (err.name === 'ValidationError') {
@@ -45,10 +50,18 @@ const errorHandler = (err, req, res, next) => {
     }
 
     // Default server error
-    res.status(err.statusCode || 500).json({
+    const statusCode = err.statusCode || 500;
+    const response = {
         type: "error",
         message: err.message || "Internal server error"
-    });
+    };
+
+    // Add error details only in development
+    if (process.env.NODE_ENV !== 'production' && err.stack) {
+        response.stack = err.stack;
+    }
+
+    res.status(statusCode).json(response);
 };
 
 // 404 handler

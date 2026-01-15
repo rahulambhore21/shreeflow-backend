@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 
-const { ShiprocketController } = require('../controllers');
+const ShiprocketController = require('../controllers/ShiprocketController');
 const { verifyToken, verifyAdmin } = require('../middlewares/auth');
 
 // All Shiprocket routes require admin access
 router.use(verifyToken, verifyAdmin);
 
 // Get shipping rates
-router.post('/rates', ShiprocketController.getShippingRates);
+router.get('/rates', ShiprocketController.getShippingRates);
 
 // Create shipping order
 router.post('/orders', ShiprocketController.createShippingOrder);

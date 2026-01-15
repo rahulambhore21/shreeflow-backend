@@ -26,5 +26,6 @@ router.delete('/zones/:id', ShippingController.deleteShippingZone);
 // Shiprocket integration routes
 router.post('/shiprocket/integration', ShippingController.saveShiprocketIntegration);
 router.get('/shiprocket/integration', ShippingController.getShiprocketIntegration);
+router.get('/shiprocket/status', ShippingController.checkShiprocketStatus);
 
 module.exports = router;

@@ -2,13 +2,22 @@ const shiprocketService = require('../services/shiprocketService');
 const Order = require('../models/Order');
 
 const ShiprocketController = {
-
     /* Get shipping rates */
     async getShippingRates(req, res) {
         try {
-            const { pickup_postcode, delivery_postcode, weight, length, breadth, height } = req.body;
+            const { pickup_postcode, delivery_postcode, weight, length, breadth, height, cod, order_amount } = req.query;
 
-            // Validate required fields
+            console.log('📦 Shiprocket Rates Request:', {
+                pickup_postcode,
+                delivery_postcode,
+                weight,
+                length,
+                breadth,
+                height,
+                cod,
+                order_amount
+            });
+
             if (!pickup_postcode || !delivery_postcode || !weight) {
                 return res.status(400).json({
                     type: "error",
@@ -22,16 +31,20 @@ const ShiprocketController = {
                 weight: parseFloat(weight),
                 length: parseFloat(length) || 10,
                 breadth: parseFloat(breadth) || 10,
-                height: parseFloat(height) || 10
+                height: parseFloat(height) || 10,
+                cod: parseInt(cod) || 0,
+                order_amount: parseFloat(order_amount) || 100
             });
+
+            console.log('✅ Shiprocket Rates Response:', rates);
 
             res.status(200).json({
                 type: "success",
-                data: rates
+                data: rates.data || rates  // Ensure we return the data object from Shiprocket response
             });
 
         } catch (error) {
-            console.error('Get shipping rates error:', error);
+            console.error('❌ Get shipping rates error:', error);
             res.status(500).json({
                 type: "error",
                 message: "Failed to get shipping rates",
@@ -40,10 +53,10 @@ const ShiprocketController = {
         }
     },
 
-    /* Create shipping order */
+    /* Create shipping order with complete workflow */
     async createShippingOrder(req, res) {
         try {
-            const { order_id, courier_id } = req.body;
+            const { order_id } = req.body;
 
             if (!order_id) {
                 return res.status(400).json({
@@ -52,7 +65,7 @@ const ShiprocketController = {
                 });
             }
 
-            // Get order from database
+            // Get order details
             const order = await Order.findById(order_id).populate('products.productId');
             if (!order) {
                 return res.status(404).json({
@@ -61,92 +74,47 @@ const ShiprocketController = {
                 });
             }
 
-            // Prepare order items for Shiprocket
-            const order_items = order.products.map(item => ({
-                name: item.productId.title,
-                sku: item.productId.sku || `SKU-${item.productId._id}`,
-                units: item.quantity,
-                selling_price: item.productId.price,
-                discount: 0,
-                tax: 0,
-                hsn: 441122 // Default HSN code, you may want to add this to product model
-            }));
-
-            // Calculate dimensions and weight (you may want to add these to product model)
-            const totalWeight = order.products.length * 0.5; // Default weight per item
-            const dimensions = {
-                length: 20,
-                breadth: 15,
-                height: 10,
-                weight: totalWeight
-            };
-
-            // Create shipping order data
-            const shippingOrderData = {
-                order_id: order._id.toString(),
-                order_date: order.createdAt.toISOString().split('T')[0],
-                pickup_location: "Primary", // You should have this configured in Shiprocket
-                channel_id: "",
-                comment: "Water Level Controller Order",
-                reseller_name: "",
-                company_name: "Shree Flow",
-                billing_customer_name: order.customer.name.split(' ')[0],
-                billing_last_name: order.customer.name.split(' ').slice(1).join(' ') || "",
-                billing_address: order.address.street,
-                billing_address_2: "",
-                billing_city: order.address.city,
-                billing_pincode: order.address.zipCode,
-                billing_state: order.address.state,
-                billing_country: order.address.country,
-                billing_email: order.customer.email,
-                billing_phone: order.customer.phone,
-                shipping_is_billing: true,
-                shipping_customer_name: order.customer.name.split(' ')[0],
-                shipping_last_name: order.customer.name.split(' ').slice(1).join(' ') || "",
-                shipping_address: order.address.street,
-                shipping_address_2: "",
-                shipping_city: order.address.city,
-                shipping_pincode: order.address.zipCode,
-                shipping_state: order.address.state,
-                shipping_country: order.address.country,
-                shipping_email: order.customer.email,
-                shipping_phone: order.customer.phone,
-                order_items,
-                payment_method: order.razorpay_payment_id ? "Prepaid" : "COD",
-                shipping_charges: 0,
-                giftwrap_charges: 0,
-                transaction_charges: 0,
-                total_discount: 0,
-                sub_total: order.amount,
-                ...dimensions
-            };
-
-            const shippingOrder = await shiprocketService.createOrder(shippingOrderData);
-
-            // If courier_id is provided, generate AWB
-            if (courier_id && shippingOrder.shipment_id) {
-                const awb = await shiprocketService.generateAWB(shippingOrder.shipment_id, courier_id);
-                shippingOrder.awb_details = awb;
+            if (order.status === 'shipped' && order.shipment) {
+                return res.status(400).json({
+                    type: "error",
+                    message: "Order already shipped"
+                });
             }
 
-            // Update order status
-            await Order.findByIdAndUpdate(order_id, { 
+            // Use the complete shipment workflow from service
+            const shipmentResult = await shiprocketService.createOrderFromOurFormat(order);
+
+            // Update order with shipment details
+            await Order.findByIdAndUpdate(order_id, {
                 status: 'shipped',
-                shipment_id: shippingOrder.shipment_id,
-                awb: shippingOrder.awb_details?.awb_code
+                shipment: {
+                    shiprocket_order_id: shipmentResult.order_id,
+                    shipment_id: shipmentResult.shipment_id,
+                    awb_code: shipmentResult.awb_code || null,
+                    courier_id: shipmentResult.courier_company_id || null,
+                    courier_name: shipmentResult.courier_name || 'Pending Assignment',
+                    estimated_delivery_date: shipmentResult.estimated_delivery_date || null,
+                    status: 'NEW',
+                    tracking_url: shipmentResult.awb_code ? `https://shiprocket.co/tracking/${shipmentResult.awb_code}` : null
+                }
             });
 
             res.status(200).json({
                 type: "success",
-                message: "Shipping order created successfully",
-                data: shippingOrder
+                message: "Complete shipment created successfully with automatic courier selection",
+                data: {
+                    shipment_id: shipmentResult.shipment_id,
+                    awb_code: shipmentResult.awb_code || 'Pending',
+                    courier_name: shipmentResult.courier_name || 'Pending Assignment',
+                    estimated_delivery_date: shipmentResult.estimated_delivery_date || 'TBD'
+                }
             });
 
         } catch (error) {
-            console.error('Create shipping order error:', error);
+            console.error('Create complete shipment error:', error);
             res.status(500).json({
                 type: "error",
-                message: "Failed to create shipping order",
+                message: "Failed to create complete shipment",
                 error: error.message
             });
         }
@@ -165,6 +133,17 @@ const ShiprocketController = {
             }
 
             const tracking = await shiprocketService.trackShipment(awb);
+
+            // Update order if tracking found
+            if (tracking && tracking.tracking_data && tracking.tracking_data.track_status) {
+                const order = await Order.findOne({ 'shipment.awb_code': awb });
+                if (order) {
+                    await Order.findByIdAndUpdate(order._id, {
+                        'shipment.status': tracking.tracking_data.track_status,
+                        'shipment.current_status': tracking.tracking_data.current_status
+                    });
+                }
+            }
 
             res.status(200).json({
                 type: "success",
@@ -250,6 +229,17 @@ const ShiprocketController = {
             }
 
             const result = await shiprocketService.cancelShipment(awb);
+
+            // Update order status if cancellation successful
+            if (result.status_code === 200) {
+                await Order.findOneAndUpdate(
+                    { 'shipment.awb_code': awb },
+                    { 
+                        status: 'cancelled',
+                        'shipment.status': 'CANCELLED'
+                    }
+                );
+            }
 
             res.status(200).json({
                 type: "success",

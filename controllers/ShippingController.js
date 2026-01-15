@@ -352,52 +352,51 @@ const ShippingController = {
         }
     },
 
-    /* Save Shiprocket Integration */
+    /* ✅ PRODUCTION SAFE: Login to Shiprocket (no password storage) */
     async saveShiprocketIntegration(req, res) {
         try {
-            const { email, token } = req.body;
+            const { email, password } = req.body;
 
-            if (!email || !token) {
+            if (!email || !password) {
                 return res.status(400).json({
                     type: "error",
-                    message: "Email and token are required"
+                    message: "Email and password are required"
                 });
             }
 
-            // Find existing integration or create new one
-            let integration = await ShiprocketIntegration.findOne();
-            
-            if (integration) {
-                // Update existing integration
-                integration.email = email;
-                integration.token = token;
-                integration.isActive = true;
-                await integration.save();
-            } else {
-                // Create new integration
-                integration = new ShiprocketIntegration({
-                    email,
-                    token,
-                    isActive: true
+            // Validate email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({
+                    type: "error",
+                    message: "Please provide a valid email address"
                 });
-                await integration.save();
             }
+
+            // ✅ SECURITY: Login once, get token, store only token + expiry
+            const shiprocketService = require('../services/shiprocketService');
+            const result = await shiprocketService.performLogin(email, password);
 
             res.status(200).json({
                 type: "success",
-                message: "Shiprocket integration settings saved successfully",
+                message: "Shiprocket authentication successful",
                 data: {
-                    email: integration.email,
-                    isActive: integration.isActive
+                    email: email,
+                    isActive: true,
+                    pickup_locations: result.pickup_locations,
+                    connected_at: new Date().toISOString()
                 }
             });
 
         } catch (error) {
-            console.error('Save Shiprocket integration error:', error);
-            res.status(500).json({
-                type: "error",
-                message: "Failed to save Shiprocket integration settings",
+            console.error('Shiprocket authentication error:', {
+                email: req.body.email,
                 error: error.message
+            });
+            
+            res.status(400).json({
+                type: "error",
+                message: error.message || "Failed to authenticate with Shiprocket"
             });
         }
     },
@@ -405,7 +404,7 @@ const ShippingController = {
     /* Get Shiprocket Integration */
     async getShiprocketIntegration(req, res) {
         try {
-            const integration = await ShiprocketIntegration.findOne().select('email isActive createdAt updatedAt');
+            const integration = await ShiprocketIntegration.findOne().select('email isActive lastAuthenticated tokenExpiry createdAt updatedAt');
 
             if (!integration) {
                 return res.status(200).json({
@@ -415,9 +414,19 @@ const ShippingController = {
                 });
             }
 
+            // ✅ SAFE: Don't expose token, show only status
+            const response = {
+                email: integration.email,
+                isActive: integration.isActive,
+                lastAuthenticated: integration.lastAuthenticated,
+                tokenValid: integration.tokenExpiry && new Date(integration.tokenExpiry) > new Date(),
+                createdAt: integration.createdAt,
+                updatedAt: integration.updatedAt
+            };
+
             res.status(200).json({
                 type: "success",
-                data: integration
+                data: response
             });
 
         } catch (error) {
@@ -425,6 +434,27 @@ const ShippingController = {
             res.status(500).json({
                 type: "error",
                 message: "Failed to fetch Shiprocket integration settings",
+                error: error.message
+            });
+        }
+    },
+
+    /* ✅ NEW: Check Shiprocket Status */
+    async checkShiprocketStatus(req, res) {
+        try {
+            const shiprocketService = require('../services/shiprocketService');
+            const status = await shiprocketService.checkIntegrationStatus();
+
+            res.status(200).json({
+                type: "success",
+                data: status
+            });
+
+        } catch (error) {
+            console.error('Check Shiprocket status error:', error);
+            res.status(500).json({
+                type: "error",
+                message: "Failed to check Shiprocket status",
                 error: error.message
             });
         }

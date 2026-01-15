@@ -106,11 +106,63 @@ const validatePagination = [
     handleValidationErrors
 ];
 
+// Payment validation rules
+const validatePaymentOrder = [
+    body('amount')
+        .isFloat({ min: 0.01 })
+        .withMessage('Amount must be a positive number'),
+    body('currency')
+        .optional()
+        .isIn(['INR', 'USD', 'EUR'])
+        .withMessage('Currency must be INR, USD, or EUR'),
+    handleValidationErrors
+];
+
+const validatePaymentVerification = [
+    body('razorpay_order_id')
+        .notEmpty()
+        .withMessage('Razorpay order ID is required')
+        .isString()
+        .withMessage('Razorpay order ID must be a string'),
+    body('razorpay_payment_id')
+        .notEmpty()
+        .withMessage('Razorpay payment ID is required')
+        .isString()
+        .withMessage('Razorpay payment ID must be a string'),
+    body('razorpay_signature')
+        .notEmpty()
+        .withMessage('Razorpay signature is required')
+        .isString()
+        .withMessage('Razorpay signature must be a string'),
+    handleValidationErrors
+];
+
+// Input sanitization middleware
+const sanitizeInput = (req, res, next) => {
+    // Remove any potential MongoDB operators from request body
+    if (req.body) {
+        const sanitize = (obj) => {
+            for (let key in obj) {
+                if (typeof key === 'string' && key.startsWith('$')) {
+                    delete obj[key];
+                } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+                    sanitize(obj[key]);
+                }
+            }
+        };
+        sanitize(req.body);
+    }
+    next();
+};
+
 module.exports = {
     validateProduct,
     validateGuestOrder,
     validateOrderTracking,
     validateObjectId,
     validatePagination,
+    validatePaymentOrder,
+    validatePaymentVerification,
+    sanitizeInput,
     handleValidationErrors
 };

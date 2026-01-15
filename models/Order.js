@@ -87,7 +87,54 @@ const OrderSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
-    // Shipping fields
+    // ✅ ENHANCED: Complete shipment tracking
+    shipment: {
+        shiprocket_order_id: {
+            type: String,
+            default: null
+        },
+        shipment_id: {
+            type: String,
+            default: null
+        },
+        awb_code: {
+            type: String,
+            default: null
+        },
+        courier_name: {
+            type: String,
+            default: null
+        },
+        courier_company_id: {
+            type: String,
+            default: null
+        },
+        status: {
+            type: String,
+            default: 'Pending'
+        },
+        estimated_delivery: {
+            type: Date,
+            default: null
+        },
+        shipping_cost: {
+            type: Number,
+            default: 0
+        },
+        last_location: {
+            type: String,
+            default: null
+        },
+        last_update: {
+            type: Date,
+            default: null
+        },
+        created_at: {
+            type: Date,
+            default: null
+        }
+    },
+    // Legacy shipping fields (for backward compatibility)
     shipment_id: {
         type: String,
         default: null
