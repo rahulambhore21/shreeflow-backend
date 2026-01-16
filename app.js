@@ -88,10 +88,28 @@ app.use('/api/', generalLimiter);
 app.use('/api/v1/auth', authLimiter);
 
 // Middleware
-app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:3000'|| 'https://www.shreeflow.in',
-    credentials: true
-}));
+const allowedOrigins = [
+  "https://shreeflow.in",
+  "https://www.shreeflow.in",
+  "http://localhost:3000"
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow server-to-server or curl
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
