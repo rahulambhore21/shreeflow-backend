@@ -89,7 +89,7 @@ app.use('/api/v1/auth', authLimiter);
 
 // Middleware
 app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: process.env.CLIENT_URL || 'http://localhost:3000'|| 'https://shreeflow-frontend.admkartech.cloud',
     credentials: true
 }));
 app.use(cookieParser());
