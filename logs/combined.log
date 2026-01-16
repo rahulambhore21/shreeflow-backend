@@ -487,3 +487,15 @@
 {"level":"info","message":"::1 - - [16/Jan/2026:18:46:56 +0000] \"GET /api/v1/shiprocket/rates?pickup_postcode=444504&delivery_postcode=400037&weight=2&length=10&breadth=10&height=10&cod=0&order_amount=100 HTTP/1.1\" 200 - \"http://localhost:3000/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0\"","service":"shreelove-backend","timestamp":"2026-01-17 00:16:56"}
 {"level":"info","message":"::1 - - [16/Jan/2026:18:47:29 +0000] \"OPTIONS /api/v1/shiprocket/orders HTTP/1.1\" 204 0 \"http://localhost:3000/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0\"","service":"shreelove-backend","timestamp":"2026-01-17 00:17:29"}
 {"level":"info","message":"::1 - - [16/Jan/2026:18:47:29 +0000] \"POST /api/v1/shiprocket/orders HTTP/1.1\" 500 167 \"http://localhost:3000/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0\"","service":"shreelove-backend","timestamp":"2026-01-17 00:17:29"}
+{"level":"info","message":"✅ Connected to MongoDB","service":"shreelove-backend","timestamp":"2026-01-17 02:12:04"}
+{"level":"info","message":"🚀 Server running on port 5000","service":"shreelove-backend","timestamp":"2026-01-17 02:12:04"}
+{"level":"info","message":"📡 API URL: http://localhost:5000/api/v1","service":"shreelove-backend","timestamp":"2026-01-17 02:12:04"}
+{"level":"info","message":"✅ Connected to MongoDB","service":"shreelove-backend","timestamp":"2026-01-17 03:07:40"}
+{"level":"info","message":"🚀 Server running on port 5000","service":"shreelove-backend","timestamp":"2026-01-17 03:07:40"}
+{"level":"info","message":"📡 API URL: http://localhost:5000/api/v1","service":"shreelove-backend","timestamp":"2026-01-17 03:07:40"}
+{"level":"info","message":"✅ Connected to MongoDB","service":"shreelove-backend","timestamp":"2026-01-17 03:07:44"}
+{"level":"info","message":"🚀 Server running on port 5000","service":"shreelove-backend","timestamp":"2026-01-17 03:07:44"}
+{"level":"info","message":"📡 API URL: http://localhost:5000/api/v1","service":"shreelove-backend","timestamp":"2026-01-17 03:07:44"}
+{"level":"info","message":"✅ Connected to MongoDB","service":"shreelove-backend","timestamp":"2026-01-17 03:07:48"}
+{"level":"info","message":"🚀 Server running on port 5000","service":"shreelove-backend","timestamp":"2026-01-17 03:07:48"}
+{"level":"info","message":"📡 API URL: http://localhost:5000/api/v1","service":"shreelove-backend","timestamp":"2026-01-17 03:07:48"}
