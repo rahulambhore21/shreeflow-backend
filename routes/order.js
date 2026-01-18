@@ -22,8 +22,10 @@ router.get('/admin/analytics', verifyToken, verifyAdmin, OrderController.get_ord
 // Update order status
 router.put('/admin/:id/status', verifyToken, verifyAdmin, OrderController.update_order_status);
 
-// Shiprocket integration routes
-router.post('/admin/:orderId/shipment', verifyToken, verifyAdmin, OrderController.createShipment);
+// Manual shipment creation for orders (if automatic creation failed)
+router.post('/admin/:id/shipment', verifyToken, verifyAdmin, require('../controllers/ShiprocketController').createShippingOrder);
+
+// Shiprocket integration routes (tracking only - shipment creation is automatic)
 router.get('/admin/:orderId/track', verifyToken, verifyAdmin, OrderController.trackShipment);
 router.get('/admin/shiprocket/status', verifyToken, verifyAdmin, OrderController.checkShiprocketStatus);
 

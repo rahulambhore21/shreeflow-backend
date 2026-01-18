@@ -21,6 +21,65 @@ const OrderController = {
             const populatedOrder = await Order.findById(savedOrder._id)
                 .populate('products.productId', 'title price image');
             
+            // 🚀 AUTOMATIC SHIPMENT CREATION - No admin intervention needed
+            try {
+                console.log('🚀 Auto-creating Shiprocket shipment for order:', savedOrder._id);
+                
+                // Prepare shipment data from order
+                const shipmentData = {
+                    order_id: savedOrder._id.toString(),
+                    billing_customer_name: populatedOrder.customer.name.split(' ')[0] || populatedOrder.customer.name,
+                    billing_last_name: populatedOrder.customer.name.split(' ').slice(1).join(' ') || '.',
+                    billing_address: populatedOrder.address.street,
+                    billing_city: populatedOrder.address.city,
+                    billing_pincode: populatedOrder.address.zipCode,
+                    billing_state: populatedOrder.address.state,
+                    billing_country: populatedOrder.address.country || 'India',
+                    billing_email: populatedOrder.customer.email,
+                    billing_phone: populatedOrder.customer.phone,
+                    shipping_is_billing: true,
+                    order_items: populatedOrder.products.map(item => ({
+                        name: item.productId?.title || 'Product',
+                        sku: item.productId?._id?.toString() || 'SKU',
+                        units: item.quantity,
+                        selling_price: item.productId?.price || 0
+                    })),
+                    payment_method: populatedOrder.paymentMethod === 'cod' ? 'COD' : 'Prepaid',
+                    sub_total: populatedOrder.amount - (populatedOrder.shipping_charges || 0),
+                    // Required shipping fields
+                    weight: 0.5, // Default weight in kg (500g)
+                    length: 10,  // Default dimensions in cm
+                    breadth: 10,
+                    height: 5
+                };
+
+                // Create shipment automatically
+                const shipmentResult = await shiprocketService.createCompleteShipment(shipmentData);
+                
+                if (shipmentResult.success) {
+                    console.log('✅ Shipment created automatically:', shipmentResult);
+                    
+                    // Update order with shipment details
+                    await Order.findByIdAndUpdate(savedOrder._id, {
+                        $set: {
+                            shiprocket_order_id: shipmentResult.shiprocket_order_id,
+                            shiprocket_shipment_id: shipmentResult.shiprocket_shipment_id,
+                            awb_code: shipmentResult.awb_code,
+                            courier_name: shipmentResult.courier_name
+                        }
+                    });
+                    
+                    console.log('✅ Order updated with shipment details');
+                } else {
+                    console.warn('⚠️ Shipment creation failed:', shipmentResult.error);
+                    // Don't fail the order creation, just log the error
+                }
+            } catch (shipmentError) {
+                console.error('❌ Auto-shipment creation error:', shipmentError);
+                // Don't fail the order creation if shipment fails
+                // Admin can manually create it if needed
+            }
+            
             res.status(201).json({
                 type: "success",
                 message: orderData.paymentMethod === 'cod' 
@@ -246,122 +305,6 @@ const OrderController = {
                 type: "error",
                 message: "Failed to retrieve analytics",
                 error: err.message
-            });
-        }
-    },
-
-    /* Create Shiprocket shipment for order */
-    async createShipment(req, res) {
-        try {
-            const { orderId } = req.params;
-            
-            // Populate products to get product details
-            const order = await Order.findById(orderId).populate('products.productId');
-            if (!order) {
-                return res.status(404).json({
-                    type: "error",
-                    message: "Order not found"
-                });
-            }
-
-            console.log('📦 Creating shipment for order:', {
-                id: order._id,
-                hasCustomer: !!order.customer,
-                customerData: order.customer,
-                hasProducts: !!order.products && order.products.length > 0,
-                productsCount: order.products?.length,
-                hasAddress: !!order.address,
-                addressData: order.address,
-                paymentMethod: order.paymentMethod,
-                amount: order.amount,
-                shipping_charges: order.shipping_charges
-            });
-
-            // Validate required order data
-            if (!order.customer || !order.customer.name || !order.customer.phone || !order.customer.email) {
-                return res.status(400).json({
-                    type: "error",
-                    message: "Order missing customer information"
-                });
-            }
-
-            if (!order.address || !order.address.street || !order.address.city || !order.address.state || !order.address.zipCode) {
-                return res.status(400).json({
-                    type: "error",
-                    message: "Order missing complete address information"
-                });
-            }
-
-            if (order.shipment_id) {
-                return res.status(400).json({
-                    type: "error",
-                    message: "Shipment already created for this order",
-                    shipmentId: order.shipment_id
-                });
-            }
-
-            // Check Shiprocket integration status
-            const integrationStatus = await shiprocketService.checkIntegrationStatus();
-            console.log('🔍 Shiprocket integration status:', integrationStatus);
-
-            if (integrationStatus.status === 'token_expired') {
-                return res.status(400).json({
-                    type: "error",
-                    message: "Shiprocket authentication expired. Please re-login in Shipping settings.",
-                    requiresReauth: true
-                });
-            }
-
-            if (integrationStatus.status === 'error') {
-                return res.status(400).json({
-                    type: "error",
-                    message: `Shiprocket integration error: ${integrationStatus.message}`,
-                    requiresReauth: integrationStatus.requires_reauth
-                });
-            }
-
-            // Create shipment in Shiprocket
-            console.log('🚀 Creating shipment in Shiprocket...');
-            const shipmentResult = await shiprocketService.createOrderFromOurFormat(order);
-            console.log('✅ Shipment created successfully:', shipmentResult);
-            
-            // Update order with shipment details
-            order.shipment_id = shipmentResult.shipment_id;
-            order.status = 'shipped';
-            if (shipmentResult.awb_code) {
-                order.awb = shipmentResult.awb_code;
-            }
-            await order.save();
-
-            res.status(200).json({
-                type: "success",
-                message: "Shipment created successfully",
-                data: {
-                    orderId: order._id,
-                    shipmentId: shipmentResult.shipment_id,
-                    awb: shipmentResult.awb_code,
-                    courierName: shipmentResult.courier_name
-                }
-            });
-        } catch (error) {
-            console.error('❌ Create shipment error:', error);
-            
-            // Provide more specific error messages
-            let errorMessage = "Failed to create shipment";
-            if (error.message.includes('TOKEN_EXPIRED')) {
-                errorMessage = "Shiprocket authentication expired. Please re-login in Shipping settings.";
-            } else if (error.message.includes('not configured')) {
-                errorMessage = "Shiprocket integration not configured. Please configure it in Shipping settings.";
-            } else if (error.response?.data?.message) {
-                errorMessage = `Shiprocket error: ${error.response.data.message}`;
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
-
-            res.status(500).json({
-                type: "error",
-                message: errorMessage,
-                error: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }
     },

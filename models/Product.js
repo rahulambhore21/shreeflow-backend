@@ -31,11 +31,6 @@ const ProductSchema = new mongoose.Schema({
         required: [true, 'Product price is required'],
         min: [0, 'Price must be a positive number']
     },
-    stock: {
-        type: Number,
-        default: 0,
-        min: [0, 'Stock cannot be negative']
-    },
     sku: {
         type: String,
         unique: true,
@@ -44,6 +39,31 @@ const ProductSchema = new mongoose.Schema({
     active: {
         type: Boolean,
         default: true
+    },
+    // Shipping dimensions for Shiprocket
+    weight: {
+        type: Number,
+        default: 0.5,
+        min: [0.01, 'Weight must be at least 0.01 kg'],
+        max: [50, 'Weight cannot exceed 50 kg']
+    },
+    length: {
+        type: Number,
+        default: 10,
+        min: [1, 'Length must be at least 1 cm'],
+        max: [200, 'Length cannot exceed 200 cm']
+    },
+    breadth: {
+        type: Number,
+        default: 10,
+        min: [1, 'Breadth must be at least 1 cm'],
+        max: [200, 'Breadth cannot exceed 200 cm']
+    },
+    height: {
+        type: Number,
+        default: 5,
+        min: [1, 'Height must be at least 1 cm'],
+        max: [200, 'Height cannot exceed 200 cm']
     }
 },
     { timestamps: true }

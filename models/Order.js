@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const OrderSchema = new mongoose.Schema({
+    orderId: {
+        type: String,
+        unique: true,
+        sparse: true
+    },
     customer: {
         name: {
             type: String,
@@ -164,12 +169,55 @@ const OrderSchema = new mongoose.Schema({
     shipping_charges: {
         type: Number,
         default: 0
+    },
+    // New fields for automatic shipment creation
+    shiprocket_order_id: {
+        type: String,
+        default: null
+    },
+    shiprocket_shipment_id: {
+        type: String,
+        default: null
+    },
+    awb_code: {
+        type: String,
+        default: null
     }
 },
     { timestamps: true }
 );
 
+// Generate custom order ID before saving
+OrderSchema.pre('save', async function(next) {
+    if (!this.orderId && this.isNew) {
+        try {
+            const year = new Date().getFullYear();
+            const month = String(new Date().getMonth() + 1).padStart(2, '0');
+            
+            // Find the last order for this year-month
+            const lastOrder = await this.constructor.findOne({
+                orderId: new RegExp(`^SF-${year}${month}-`)
+            }).sort({ orderId: -1 });
+            
+            let sequence = 1;
+            if (lastOrder && lastOrder.orderId) {
+                const lastSequence = parseInt(lastOrder.orderId.split('-')[2]);
+                sequence = lastSequence + 1;
+            }
+            
+            // Generate order ID: SF-YYYYMM-XXXX (e.g., SF-202601-0001)
+            this.orderId = `SF-${year}${month}-${String(sequence).padStart(4, '0')}`;
+        } catch (error) {
+            console.error('Error generating order ID:', error);
+            // Fallback to timestamp-based ID
+            this.orderId = `SF-${Date.now()}`;
+        }
+    }
+    next();
+});
+
 // Create indexes for better performance
+OrderSchema.index({ orderId: 1 }, { unique: true, sparse: true });
 OrderSchema.index({ 'customer.email': 1 });
 OrderSchema.index({ 'customer.phone': 1 });
 OrderSchema.index({ status: 1 });

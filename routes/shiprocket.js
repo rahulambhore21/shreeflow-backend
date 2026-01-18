@@ -25,4 +25,7 @@ router.get('/couriers', ShiprocketController.getAvailableCouriers);
 // Cancel shipment
 router.post('/cancel', ShiprocketController.cancelShipment);
 
+// Generate invoice
+router.get('/invoice/:order_id', ShiprocketController.generateInvoice);
+
 module.exports = router;

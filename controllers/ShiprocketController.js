@@ -56,7 +56,7 @@ const ShiprocketController = {
     /* Create shipping order with complete workflow */
     async createShippingOrder(req, res) {
         try {
-            const { order_id } = req.body;
+            const { order_id, address_data } = req.body;
 
             if (!order_id) {
                 return res.status(400).json({
@@ -82,7 +82,14 @@ const ShiprocketController = {
             }
 
             // Use the complete shipment workflow from service
-            const shipmentResult = await shiprocketService.createOrderFromOurFormat(order);
+            let shipmentResult;
+            if (address_data) {
+                // Create shipment with custom address data
+                shipmentResult = await shiprocketService.createOrderWithCustomAddress(order, address_data);
+            } else {
+                // Create shipment with order's default address
+                shipmentResult = await shiprocketService.createOrderFromOurFormat(order);
+            }
 
             // Update order with shipment details
             await Order.findByIdAndUpdate(order_id, {
@@ -163,11 +170,12 @@ const ShiprocketController = {
     /* Get pickup locations */
     async getPickupLocations(req, res) {
         try {
-            const locations = await shiprocketService.getPickupLocations();
-
+            const response = await shiprocketService.getPickupLocations();
+            
+            // Return the data field from Shiprocket response
             res.status(200).json({
                 type: "success",
-                data: locations
+                data: response.data || {}
             });
 
         } catch (error) {
@@ -252,6 +260,57 @@ const ShiprocketController = {
             res.status(500).json({
                 type: "error",
                 message: "Failed to cancel shipment",
+                error: error.message
+            });
+        }
+    },
+
+    /* Generate invoice for order */
+    async generateInvoice(req, res) {
+        try {
+            const { order_id } = req.params;
+
+            if (!order_id) {
+                return res.status(400).json({
+                    type: "error",
+                    message: "Order ID is required"
+                });
+            }
+
+            // Get order details to find shiprocket_order_id
+            const order = await Order.findById(order_id);
+            if (!order) {
+                return res.status(404).json({
+                    type: "error",
+                    message: "Order not found"
+                });
+            }
+
+            if (!order.shiprocket_order_id) {
+                return res.status(400).json({
+                    type: "error",
+                    message: "This order does not have a Shiprocket shipment. Invoice can only be generated for shipped orders."
+                });
+            }
+
+            console.log('📄 Generating invoice for Shiprocket order:', order.shiprocket_order_id);
+
+            // Generate invoice through Shiprocket
+            const invoiceData = await shiprocketService.getInvoice([order.shiprocket_order_id]);
+
+            console.log('✅ Invoice generated:', invoiceData);
+
+            res.status(200).json({
+                type: "success",
+                message: "Invoice generated successfully",
+                data: invoiceData
+            });
+
+        } catch (error) {
+            console.error('❌ Generate invoice error:', error);
+            res.status(500).json({
+                type: "error",
+                message: "Failed to generate invoice",
                 error: error.message
             });
         }

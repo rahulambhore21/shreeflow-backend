@@ -152,10 +152,6 @@ const AnalyticsController = {
                 }
             ]);
 
-            // Product stock analysis
-            const outOfStockProducts = await Product.countDocuments({ stock: 0 });
-            const lowStockProducts = await Product.countDocuments({ stock: { $gt: 0, $lte: 5 } });
-
             // New customers this month
             const newCustomersThisMonth = await User.countDocuments({
                 isAdmin: false,
@@ -191,8 +187,6 @@ const AnalyticsController = {
                     returningCustomers: returningCustomers[0]?.returningCustomers || 0,
                     
                     totalProducts,
-                    outOfStockProducts,
-                    lowStockProducts,
                     
                     topSellingProducts,
                     monthlyRevenue: monthlyRevenueArray
