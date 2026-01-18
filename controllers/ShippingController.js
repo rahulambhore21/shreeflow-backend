@@ -458,6 +458,118 @@ const ShippingController = {
                 error: error.message
             });
         }
+    },
+
+    /* Calculate shipping cost for checkout */
+    async calculateShippingForCheckout(req, res) {
+        try {
+            const shiprocketService = require('../services/shiprocketService');
+            const { delivery_postcode, weight, cod, order_amount } = req.body;
+
+            // Validate required fields
+            if (!delivery_postcode || !weight || !order_amount) {
+                return res.status(400).json({
+                    type: "error",
+                    message: "delivery_postcode, weight, and order_amount are required"
+                });
+            }
+
+            // Default pickup postcode - you should store this in env or config
+            const pickup_postcode = process.env.PICKUP_POSTCODE || '400001';
+
+            console.log('📦 Calculating shipping for checkout:', {
+                delivery_postcode,
+                weight,
+                cod: cod ? 1 : 0,
+                order_amount
+            });
+
+            // Get shipping rates from Shiprocket
+            const rates = await shiprocketService.getShippingRates({
+                pickup_postcode,
+                delivery_postcode,
+                weight: parseFloat(weight),
+                length: 10,
+                breadth: 10,
+                height: 5,
+                cod: cod ? 1 : 0,
+                order_amount: parseFloat(order_amount)
+            });
+
+            if (!rates || !rates.data || !rates.data.available_courier_companies) {
+                return res.status(200).json({
+                    type: "success",
+                    data: {
+                        available: false,
+                        message: "Shipping not available for this location",
+                        shipping_charge: 0
+                    }
+                });
+            }
+
+            // Get the cheapest available courier
+            const couriers = rates.data.available_courier_companies;
+            if (couriers.length === 0) {
+                return res.status(200).json({
+                    type: "success",
+                    data: {
+                        available: false,
+                        message: "No couriers available for this location",
+                        shipping_charge: 0
+                    }
+                });
+            }
+
+            // Sort by freight_charge and get cheapest
+            const sortedCouriers = couriers.sort((a, b) => 
+                (a.freight_charge || 0) - (b.freight_charge || 0)
+            );
+
+            const cheapestCourier = sortedCouriers[0];
+            const shippingCharge = parseFloat(cheapestCourier.freight_charge || 0);
+
+            console.log('✅ Shipping calculation result:', {
+                courier: cheapestCourier.courier_name,
+                charge: shippingCharge,
+                etd: cheapestCourier.etd
+            });
+
+            res.status(200).json({
+                type: "success",
+                data: {
+                    available: true,
+                    shipping_charge: shippingCharge,
+                    courier_name: cheapestCourier.courier_name,
+                    estimated_delivery_days: cheapestCourier.etd,
+                    all_couriers: sortedCouriers.map(c => ({
+                        name: c.courier_name,
+                        charge: c.freight_charge,
+                        etd: c.etd
+                    }))
+                }
+            });
+
+        } catch (error) {
+            console.error('Calculate shipping error:', error);
+            
+            // If Shiprocket is not configured, return zero shipping
+            if (error.message.includes('not configured') || error.message === 'TOKEN_EXPIRED') {
+                return res.status(200).json({
+                    type: "success",
+                    data: {
+                        available: false,
+                        message: "Shiprocket integration not configured. Shipping charges will be calculated later.",
+                        shipping_charge: 0
+                    }
+                });
+            }
+
+            res.status(500).json({
+                type: "error",
+                message: "Failed to calculate shipping cost",
+                error: error.message
+            });
+        }
     }
 };
 

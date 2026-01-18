@@ -551,7 +551,22 @@ class ShiprocketService {
     // Helper method to create order from our order format
     async createOrderFromOurFormat(order) {
         try {
-            console.log('Order data received:', JSON.stringify(order, null, 2));
+            console.log('📦 Order data received - Full Details:', {
+                orderId: order._id,
+                hasCustomer: !!order.customer,
+                customerData: order.customer,
+                hasAddress: !!order.address,
+                addressData: order.address,
+                hasProducts: !!order.products,
+                productsCount: order.products?.length,
+                products: order.products?.map(p => ({
+                    productId: p.productId?._id || p.productId,
+                    title: p.productId?.title,
+                    quantity: p.quantity
+                })),
+                paymentMethod: order.paymentMethod,
+                amount: order.amount
+            });
             
             // First, ensure we have a pickup location
             try {
@@ -643,7 +658,9 @@ class ShiprocketService {
             // Ensure customerInfo has required fields with safety checks
             const safeName = customerInfo.name || 'Guest Customer';
             const safeEmail = customerInfo.email || 'guest@shreeflow.com';
-            const safePhone = customerInfo.phone || '9999999999';
+            const rawPhone = customerInfo.phone || '9999999999';
+            // Clean phone number - remove all non-digits
+            const safePhone = rawPhone.toString().replace(/\D/g, '').slice(-10);
 
             const orderData = {
                 order_id: order._id.toString(),
@@ -658,7 +675,7 @@ class ShiprocketService {
                 billing_state: addressInfo.state,
                 billing_country: addressInfo.country,
                 billing_email: safeEmail,
-                billing_phone: safePhone.toString(),
+                billing_phone: safePhone,
                 shipping_customer_name: safeName.split(' ')[0] || safeName,
                 shipping_last_name: safeName.split(' ').slice(1).join(' ') || "",
                 shipping_address: addressInfo.street,
@@ -667,9 +684,9 @@ class ShiprocketService {
                 shipping_state: addressInfo.state,
                 shipping_country: addressInfo.country,
                 shipping_email: safeEmail,
-                shipping_phone: safePhone.toString(),
+                shipping_phone: safePhone,
                 order_items: orderItems,
-                payment_method: order.razorpay_payment_id ? "Prepaid" : "COD",
+                payment_method: order.paymentMethod === 'cod' ? "COD" : "Prepaid",
                 sub_total: order.amount,
                 length: 20,
                 breadth: 15,  
@@ -679,6 +696,19 @@ class ShiprocketService {
 
             console.log('Final orderData for Shiprocket:', JSON.stringify(orderData, null, 2));
             
+            // Validate critical fields before sending
+            if (!orderData.billing_phone || orderData.billing_phone.length !== 10) {
+                throw new Error(`Invalid phone number: ${orderData.billing_phone}. Must be exactly 10 digits.`);
+            }
+            
+            if (!orderData.billing_pincode || orderData.billing_pincode.length !== 6) {
+                throw new Error(`Invalid pincode: ${orderData.billing_pincode}. Must be exactly 6 digits.`);
+            }
+
+            if (!orderData.order_items || orderData.order_items.length === 0) {
+                throw new Error('No order items found');
+            }
+
             // Create order in Shiprocket
             const shipmentResponse = await this.createOrder(orderData);
             
@@ -693,7 +723,11 @@ class ShiprocketService {
                 message: 'Shipment created successfully in Shiprocket'
             };
         } catch (error) {
-            console.error('Error creating Shiprocket order from our format:', error);
+            console.error('❌ Error creating Shiprocket order from our format:', {
+                message: error.message,
+                stack: error.stack,
+                response: error.response?.data
+            });
             throw error;
         }
     }

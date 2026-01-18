@@ -6,7 +6,15 @@ const OrderController = {
     /* create new guest order */
     async create_order(req, res) {
         try {
-            const newOrder = new Order(req.body);
+            const orderData = { ...req.body };
+            
+            // If payment method is COD, set status to 'paid' immediately
+            if (orderData.paymentMethod === 'cod') {
+                orderData.status = 'paid';
+                orderData.payment_date = new Date();
+            }
+            
+            const newOrder = new Order(orderData);
             const savedOrder = await newOrder.save();
             
             // Populate product details for response
@@ -15,7 +23,9 @@ const OrderController = {
             
             res.status(201).json({
                 type: "success",
-                message: "Order created successfully",
+                message: orderData.paymentMethod === 'cod' 
+                    ? "Order placed successfully! Pay on delivery." 
+                    : "Order created successfully",
                 data: populatedOrder
             });
         } catch (err) {
@@ -254,24 +264,66 @@ const OrderController = {
                 });
             }
 
-            console.log('Order found for shipment creation:', {
+            console.log('📦 Creating shipment for order:', {
                 id: order._id,
                 hasCustomer: !!order.customer,
+                customerData: order.customer,
                 hasProducts: !!order.products && order.products.length > 0,
+                productsCount: order.products?.length,
                 hasAddress: !!order.address,
-                customer: order.customer,
-                address: order.address
+                addressData: order.address,
+                paymentMethod: order.paymentMethod,
+                amount: order.amount,
+                shipping_charges: order.shipping_charges
             });
+
+            // Validate required order data
+            if (!order.customer || !order.customer.name || !order.customer.phone || !order.customer.email) {
+                return res.status(400).json({
+                    type: "error",
+                    message: "Order missing customer information"
+                });
+            }
+
+            if (!order.address || !order.address.street || !order.address.city || !order.address.state || !order.address.zipCode) {
+                return res.status(400).json({
+                    type: "error",
+                    message: "Order missing complete address information"
+                });
+            }
 
             if (order.shipment_id) {
                 return res.status(400).json({
                     type: "error",
-                    message: "Shipment already created for this order"
+                    message: "Shipment already created for this order",
+                    shipmentId: order.shipment_id
+                });
+            }
+
+            // Check Shiprocket integration status
+            const integrationStatus = await shiprocketService.checkIntegrationStatus();
+            console.log('🔍 Shiprocket integration status:', integrationStatus);
+
+            if (integrationStatus.status === 'token_expired') {
+                return res.status(400).json({
+                    type: "error",
+                    message: "Shiprocket authentication expired. Please re-login in Shipping settings.",
+                    requiresReauth: true
+                });
+            }
+
+            if (integrationStatus.status === 'error') {
+                return res.status(400).json({
+                    type: "error",
+                    message: `Shiprocket integration error: ${integrationStatus.message}`,
+                    requiresReauth: integrationStatus.requires_reauth
                 });
             }
 
             // Create shipment in Shiprocket
+            console.log('🚀 Creating shipment in Shiprocket...');
             const shipmentResult = await shiprocketService.createOrderFromOurFormat(order);
+            console.log('✅ Shipment created successfully:', shipmentResult);
             
             // Update order with shipment details
             order.shipment_id = shipmentResult.shipment_id;
@@ -287,15 +339,29 @@ const OrderController = {
                 data: {
                     orderId: order._id,
                     shipmentId: shipmentResult.shipment_id,
-                    awb: shipmentResult.awb_code
+                    awb: shipmentResult.awb_code,
+                    courierName: shipmentResult.courier_name
                 }
             });
         } catch (error) {
-            console.error('Create shipment error:', error);
+            console.error('❌ Create shipment error:', error);
+            
+            // Provide more specific error messages
+            let errorMessage = "Failed to create shipment";
+            if (error.message.includes('TOKEN_EXPIRED')) {
+                errorMessage = "Shiprocket authentication expired. Please re-login in Shipping settings.";
+            } else if (error.message.includes('not configured')) {
+                errorMessage = "Shiprocket integration not configured. Please configure it in Shipping settings.";
+            } else if (error.response?.data?.message) {
+                errorMessage = `Shiprocket error: ${error.response.data.message}`;
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
             res.status(500).json({
                 type: "error",
-                message: "Failed to create shipment",
-                error: error.message
+                message: errorMessage,
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }
     },

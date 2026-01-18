@@ -6,6 +6,7 @@ const { verifyToken, verifyAdmin } = require('../middlewares/auth');
 
 // Public routes for shipping calculation
 router.post('/calculate', ShippingController.calculateShippingCost);
+router.post('/calculate-checkout', ShippingController.calculateShippingForCheckout);
 
 // Admin routes - require authentication and admin access
 router.use(verifyToken, verifyAdmin);

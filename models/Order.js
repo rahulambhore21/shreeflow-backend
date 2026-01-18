@@ -70,6 +70,12 @@ const OrderSchema = new mongoose.Schema({
         default: "pending",
         enum: ["pending", "paid", "shipped", "delivered", "cancelled"]
     },
+    // Payment method
+    paymentMethod: {
+        type: String,
+        enum: ["online", "cod"],
+        default: "online"
+    },
     // Razorpay payment fields
     razorpay_order_id: {
         type: String,
@@ -170,5 +176,6 @@ OrderSchema.index({ status: 1 });
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ razorpay_order_id: 1 }, { sparse: true });
 OrderSchema.index({ razorpay_payment_id: 1 }, { sparse: true });
+OrderSchema.index({ paymentMethod: 1 });
 
 module.exports = mongoose.model('Order', OrderSchema);
